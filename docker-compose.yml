@@ -1,0 +1,19 @@
+version: '2'
+
+services:
+  renderbot:
+    image: repo.vaadin.com:5000/bot-render:1.1.0-redis
+    container_name: "renderbot"
+    ports:
+      - 8090:8080
+    network_mode: "bridge"
+    environment:
+      CACHE_MODE: "elastiCache"
+      ELASTICACHE_CONFIGURATION_ENDPOINT: "redis"
+      LAZY_CONNECT: "false"
+    links:
+      - redis:redis
+
+  redis:
+    image: redis:4-alpine
+    network_mode: "bridge"
