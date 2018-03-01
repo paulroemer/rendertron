@@ -16,18 +16,21 @@
 
 'use strict';
 
+const config = require('./config');
 const datastore = require('@google-cloud/datastore')();
 const elastiCache = require('./elastiCache');
 
-class Cache {
+class CacheManager {
   async clearCache() {
-    const query = datastore.createQuery('Page');
-    const data = await datastore.runQuery(query);
-    const entities = data[0];
-    const entityKeys = entities.map((entity) => entity[datastore.KEY]);
-    console.log(`Removing ${entities.length} items from the cache`);
-    await datastore.delete(entityKeys);
-    // TODO(samli): check info (data[1]) and loop through pages of entities to delete.
+    if (config['cacheMode'] === 'google-cloud') {
+      const query = datastore.createQuery('Page');
+      const data = await datastore.runQuery(query);
+      const entities = data[0];
+      const entityKeys = entities.map((entity) => entity[datastore.KEY]);
+      console.log(`Removing ${entities.length} items from the cache`);
+      await datastore.delete(entityKeys);
+      // // TODO(samli): check info (data[1]) and loop through pages of entities to delete.
+    }
   }
 
   async cacheContent(key, headers, payload) {
@@ -48,7 +51,6 @@ class Cache {
 
   /**
    * Returns middleware function.
-   * @param {String} cacheMode
    * @return {function}
    */
   middleware(cacheMode) {
@@ -57,8 +59,9 @@ class Cache {
         if (typeof(content) === 'string') {
           body = body || '' + content;
         } else if (Buffer.isBuffer(content)) {
-          if (!body)
+          if (!body) {
             body = new Buffer(0);
+          }
           body = Buffer.concat([body, content], body.length + content.length);
         }
       }
@@ -77,6 +80,7 @@ class Cache {
         return {headers, payload};
       }
 
+      const cacheMode = config['cacheMode'];
       if (cacheMode === 'elastiCache') {
         const key = request.url;
         const result = await elastiCache.getContent(key);
@@ -121,8 +125,8 @@ class Cache {
         if (response.statusCode == 200) {
           accumulateContent(content);
           if (cacheMode === 'google-cloud') {
-            const key = datastore.key(['Page', request.url]);
-            await this.cacheContent(key, response.getHeaders(), body);
+            // const key = datastore.key(['Page', request.url]);
+            // await this.cacheContent(key, response.getHeaders(), body);
           } else if (cacheMode === 'elastiCache') {
             await elastiCache.cacheContent(request.url, response.getHeaders(), body);
           }
@@ -136,4 +140,4 @@ class Cache {
 }
 
 // TODO(samli): Allow for caching options, like freshness options.
-module.exports = new Cache();
+module.exports = new CacheManager();

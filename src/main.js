@@ -17,6 +17,7 @@
 'use strict';
 
 const assert = require('assert');
+const config = require('./config');
 const fs = require('fs');
 const https = require('https');
 const path = require('path');
@@ -26,44 +27,26 @@ const compression = require('compression');
 const express = require('express');
 const now = require('performance-now');
 const uuidv4 = require('uuid/v4');
-const cache = require('./cache');
+const cacheManager = require('./cacheManager');
 const renderer = require('./renderer');
 require('dotenv').config();
 
 const app = express();
 
-const CONFIG_PATH = path.resolve(__dirname, '../config.json');
 const PROGRESS_BAR_PATH = path.resolve(__dirname, '../node_modules/progress-bar-element/progress-bar.html');
 const PORT = process.env.PORT || '3000';
 
-// google-cloud => using google-cloud/datastore for caching
-// elastiCache => using AWS ElastiCache for caching
-const cacheMode = process.env.CACHE_MODE || 'google-cloud';
-
-let config = {};
-
-// Load config from config.json if it exists.
-if (fs.existsSync(CONFIG_PATH)) {
-  config = JSON.parse(fs.readFileSync(CONFIG_PATH));
-  assert(config instanceof Object);
-}
-
-// Only start a cache if configured and not in testing.
+// Only use caching if configured and not in testing.
 if (!module.parent && !!config['cache']) {
-  app.get('/render/:url(*)', cache.middleware(cacheMode));
-  app.get('/screenshot/:url(*)', cache.middleware());
-  if (cacheMode == 'google-cloud') {
-    // Always clear the cache for now, while things are changing.
-    cache.clearCache();
-  }
+  app.get('/render/:url(*)', cacheManager.middleware());
+  app.get('/screenshot/:url(*)', cacheManager.middleware());
+  // Always clear the caches for now, while things are changing.
+  cacheManager.clearCache();
 }
 
 // Allows the config to be overriden
 app.setConfig = (newConfig) => {
-  const oldConfig = config;
-  config = newConfig;
-  config.chrome = oldConfig.chrome;
-  config.port = oldConfig.port;
+  config.setConfig(newConfig);
 };
 
 app.use(compression());

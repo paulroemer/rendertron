@@ -1,5 +1,7 @@
+const config = require('./config');
 const redis = require('ioredis');
 const _ = require('lodash');
+const renderer = require('./renderer');
 require('dotenv').config();
 
 const host = process.env.ELASTICACHE_CONFIGURATION_ENDPOINT || 'localhost';
@@ -21,6 +23,7 @@ const lazyConnect = process.env.LAZY_CONNECT == 'false' ? false : true;
 // change lazyConnect to true if you want redis client to connect to the redis server as soon as it's created
 // with lazyConnect: true, it will only connect when running query against the redis database
 const redisClient = new redis({host: host, port: 6379, lazyConnect: lazyConnect});
+const redisSubscriberClient = new redis({host: host, port: 6379, lazyConnect: lazyConnect});
 
 let redisReady = false;
 
@@ -32,9 +35,36 @@ redisClient.on('error', function(err) {
 
 // detect if redis server is up
 redisClient.on('ready', function(err) {
-  console.log('redist is ready!');
+  console.log('redis is ready!');
   redisReady = true;
 });
+
+// redisSubscriberClient.on("ready", function (err) {
+//   redisSubscriberClient.config("SET", "notify-keyspace-events", "AKE");
+//   redisSubscriberClient.psubscribe('__key*__:*');
+// })
+
+redisSubscriberClient.on('message', function (channel, message) {
+  if(channel === '__keyevent@0__:expired') {
+    console.log("Page " + message + " expired. Refreshing...");
+
+    try {
+      var options = Object;
+      options['wc-inject-shadydom'] = true;
+      const url = message.replace("/render/", "");
+      renderer.serialize(url, options, config)
+        .then(function(result) {
+          elastiCache.cacheContent(message, "{}", result.body);
+        });
+    } catch (err) {
+      console.error('Cannot render requested URL anymore');
+      console.error(err);
+    }
+  }
+})
+
+redisSubscriberClient.config("SET", "notify-keyspace-events", "Ex");
+redisSubscriberClient.subscribe('__keyevent@0__:expired');
 
 class ElastiCache {
   /**
@@ -64,16 +94,19 @@ class ElastiCache {
         console.error(err);
       } else {
         // use the code below if you want the cache to live for a duration in terms of seconds
-        let expirationTime = Math.floor(Date.now()/1000) + cacheDurationMinutes*60*1000;
+        // let expirationTime = Math.floor(Date.now()/1000) + cacheDurationMinutes*60*1000;
+        let expirationTime = Math.floor(Date.now()/1000) + 10*1000
 
         // use the code below if you want to clear at a specific period of time
         // let end = Math.floor(moment.tz('America/New_York').endOf('day').valueOf()/1000);
         // let start = Math.floor(moment.tz('America/New_York').valueOf()/1000);
         // let expirationTime = end - start + Math.floor(Math.random()*3600);
 
-        redisClient.expire(key, expirationTime, function(err, reply) {
+        redisClient.expire(key, 30, function(err, reply) {
           if (err) {
             console.error(err);
+          } else {
+            console.error("expiration timeout for " + key + " : " + 10)
           };
         });
       };
@@ -101,4 +134,5 @@ class ElastiCache {
   }
 }
 
-module.exports = new ElastiCache();
+var elastiCache = new ElastiCache();
+module.exports = elastiCache;
