@@ -37,7 +37,7 @@ const PROGRESS_BAR_PATH = path.resolve(__dirname, '../node_modules/progress-bar-
 const PORT = process.env.PORT || '3000';
 
 // Only use caching if configured and not in testing.
-if (!module.parent && !!config['cache']) {
+if (!module.parent && !!config.cache.active) {
   app.get('/render/:url(*)', cacheManager.middleware());
   app.get('/screenshot/:url(*)', cacheManager.middleware());
   // Always clear the caches for now, while things are changing.

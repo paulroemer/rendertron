@@ -54,7 +54,7 @@ redisSubscriberClient.on('message', function (channel, message) {
       const url = message.replace("/render/", "");
       renderer.serialize(url, options, config)
         .then(function(result) {
-          elastiCache.cacheContent(message, "{}", result.body);
+          elastiCache.set(message, "{}", result.body);
         });
     } catch (err) {
       console.error('Cannot render requested URL anymore');
@@ -66,19 +66,34 @@ redisSubscriberClient.on('message', function (channel, message) {
 redisSubscriberClient.config("SET", "notify-keyspace-events", "Ex");
 redisSubscriberClient.subscribe('__keyevent@0__:expired');
 
+/**
+ * Parse the headers and payload
+ * @param {String} resultHeaders
+ * @param {String} resultPayload
+ * @return {object}
+ */
+function parsingContent(resultHeaders, resultPayload) {
+  let headers = JSON.parse(resultHeaders);
+  let payload = JSON.parse(resultPayload);
+  if (payload && typeof(payload) == 'object' && payload.type == 'Buffer')
+    payload = new Buffer(payload);
+  return {headers, payload};
+}
+
 class ElastiCache {
+  clearCache() {
+    // TODO: for now do not delete at all but maybe this is a desired but configurable feature
+  }
+
   /**
    * Cache render results to redis
    * @param {String} key
    * @param {String} headers
    * @param {String} payload
    */
-  async cacheContent(key, headers, payload) {
+  async set(key, headers, payload) {
     const pagePayload = JSON.stringify(payload);
     const pageHeaders = JSON.stringify(headers);
-
-    // Set cache length to 1 day.
-    let cacheDurationMinutes = 60*24;
 
     const params = [
       key,
@@ -89,25 +104,24 @@ class ElastiCache {
     ];
 
     // put the render result into cache
-    await redisClient.hmset(params, function(err, reply) {
+    redisClient.hmset(params, function(err, reply) {
       if (err) {
         console.error(err);
       } else {
+        console.log("Cached: " + params[0]);
         // use the code below if you want the cache to live for a duration in terms of seconds
-        // let expirationTime = Math.floor(Date.now()/1000) + cacheDurationMinutes*60*1000;
-        let expirationTime = Math.floor(Date.now()/1000) + 10*1000
+        // let expirationTimeInSeconds = Math.floor(Date.now()/1000) + cacheDurationMinutes*60*1000;
+        let expirationTimeInSeconds = config.cache.expirationTimeoutInSeconds;
 
         // use the code below if you want to clear at a specific period of time
         // let end = Math.floor(moment.tz('America/New_York').endOf('day').valueOf()/1000);
         // let start = Math.floor(moment.tz('America/New_York').valueOf()/1000);
-        // let expirationTime = end - start + Math.floor(Math.random()*3600);
+        // let expirationTimeInSeconds = end - start + Math.floor(Math.random()*3600);
 
-        redisClient.expire(key, 30, function(err, reply) {
+        redisClient.expire(key, expirationTimeInSeconds, function(err, reply) {
           if (err) {
             console.error(err);
-          } else {
-            console.error("expiration timeout for " + key + " : " + 10)
-          };
+          }
         });
       };
     });
@@ -118,12 +132,12 @@ class ElastiCache {
    * @param {String} key
    * @return {Object}
    */
-  async getContent(key) {
+  get(key) {
     if (redisReady) {
       return redisClient.hgetall(key)
         .then(function(result) {
           if (!_.isEmpty(result)) {
-            return result;
+            return parsingContent(result.headers, result.payload);
           }
           return false;
         })

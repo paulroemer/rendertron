@@ -13,7 +13,11 @@ function setConfig(newConfig) {
 
 // Defaults
 var config = {
-  debug: false
+  debug: false,
+  cache: {
+    active: true,
+    type: "google-cloud"
+  }
 };
 
 // Load config from config.json if it exists and update default values
@@ -25,13 +29,8 @@ if (fs.existsSync(CONFIG_PATH)) {
     if( fileConfig.hasOwnProperty(p) ) {
       config[p] = fileConfig[p];
     }
-
   }
 }
-
-// google-cloud => using google-cloud/datastore for caching
-// elastiCache => using AWS ElastiCache for caching
-config['cacheMode'] = process.env.CACHE_MODE || 'google-cloud';
 
 /**
  * Overrides configuration (used for tests)

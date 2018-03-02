@@ -1,3 +1,7 @@
 {
-  "cache": "true"
+  "cache": {
+    "active": "true",
+    "type": "elastiCache",
+    "expirationTimeoutInSeconds": 30
+  }
 }

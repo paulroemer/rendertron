@@ -17,43 +17,28 @@
 'use strict';
 
 const config = require('./config');
-const datastore = require('@google-cloud/datastore')();
 const elastiCache = require('./elastiCache');
+const googleCache = require('./googleCache');
 
 class CacheManager {
-  async clearCache() {
-    if (config['cacheMode'] === 'google-cloud') {
-      const query = datastore.createQuery('Page');
-      const data = await datastore.runQuery(query);
-      const entities = data[0];
-      const entityKeys = entities.map((entity) => entity[datastore.KEY]);
-      console.log(`Removing ${entities.length} items from the cache`);
-      await datastore.delete(entityKeys);
-      // // TODO(samli): check info (data[1]) and loop through pages of entities to delete.
+  constructor() {
+    // select configured cache, Google cloud is default
+    if(config.cache.type === 'elastiCache') {
+      this.cache = elastiCache;
+    } else {
+      this.cache = googleCache;
     }
   }
 
-  async cacheContent(key, headers, payload) {
-    // Set cache length to 1 day.
-    const cacheDurationMinutes = 60*24;
-    const now = new Date();
-    const entity = {
-      key: key,
-      data: [
-        {name: 'saved', value: now},
-        {name: 'expires', value: new Date(now.getTime() + cacheDurationMinutes*60*1000)},
-        {name: 'headers', value: JSON.stringify(headers), excludeFromIndexes: true},
-        {name: 'payload', value: JSON.stringify(payload), excludeFromIndexes: true},
-      ]
-    };
-    await datastore.save(entity);
+  async clearCache() {
+    this.cache.clearCache();
   }
 
   /**
    * Returns middleware function.
    * @return {function}
    */
-  middleware(cacheMode) {
+  middleware() {
     return async function(request, response, next) {
       function accumulateContent(content) {
         if (typeof(content) === 'string') {
@@ -66,54 +51,22 @@ class CacheManager {
         }
       }
 
-      /**
-       * Parse the headers and payload
-       * @param {String} resultHeaders
-       * @param {String} resultPayload
-       * @return {object}
-       */
-      function parsingContent(resultHeaders, resultPayload) {
-        let headers = JSON.parse(resultHeaders);
-        let payload = JSON.parse(resultPayload);
-        if (payload && typeof(payload) == 'object' && payload.type == 'Buffer')
-          payload = new Buffer(payload);
-        return {headers, payload};
+      // check if we have a hit and return immediately
+      const {headers, payload} = await this.cache.get(request.url);
+      if(headers && payload) {
+        response.set(headers);
+        response.set('x-rendertron', "rendertron");
+        response.set('x-rendertron-cached', "true");
+        response.send(payload);
+        return;
       }
 
-      const cacheMode = config['cacheMode'];
-      if (cacheMode === 'elastiCache') {
-        const key = request.url;
-        const result = await elastiCache.getContent(key);
-
-        if (result) {
-          const {headers, payload} = parsingContent(result.headers, result.payload);
-          response.set(headers);
-          response.send(payload);
-          return;
-        }
-      } else if (cacheMode === 'google-cloud') {
-        const key = datastore.key(['Page', request.url]);
-        const results = await datastore.get(key);
-
-        // Cache based on full URL. This means requests with different params are
-        // cached separately.
-        if (results.length && results[0] != undefined) {
-          // Serve cached content if its not expired.
-          if (results[0].expires.getTime() >= new Date().getTime()) {
-            const {headers, payload} = parsingContent(results[0].headers, results[0].payload);
-            response.set(headers);
-            response.set('x-rendertron-cached', results[0].saved.toUTCString());
-            response.send(payload);
-            return;
-          }
-        }
-      }
-
-      // Capture output to cache.
+      // not cached => configure "middleware" to intercept response to fill the cache with rendered results
       const methods = {
         write: response.write,
         end: response.end,
       };
+
       let body = null;
 
       response.write = function(content, ...args) {
@@ -124,12 +77,8 @@ class CacheManager {
       response.end = async function(content, ...args) {
         if (response.statusCode == 200) {
           accumulateContent(content);
-          if (cacheMode === 'google-cloud') {
-            // const key = datastore.key(['Page', request.url]);
-            // await this.cacheContent(key, response.getHeaders(), body);
-          } else if (cacheMode === 'elastiCache') {
-            await elastiCache.cacheContent(request.url, response.getHeaders(), body);
-          }
+
+          this.cache.set(request.url, response.getHeaders(), body);
         }
         return methods.end.apply(response, [content].concat(args));
       }.bind(this);
