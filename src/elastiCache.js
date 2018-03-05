@@ -64,14 +64,14 @@ class ElastiCache {
         console.error(err);
       } else {
         // use the code below if you want the cache to live for a duration in terms of seconds
-        let expirationTime = Math.floor(Date.now()/1000) + cacheDurationMinutes*60*1000;
+        let expirationTimeInSeconds = 12*60*60
 
         // use the code below if you want to clear at a specific period of time
         // let end = Math.floor(moment.tz('America/New_York').endOf('day').valueOf()/1000);
         // let start = Math.floor(moment.tz('America/New_York').valueOf()/1000);
         // let expirationTime = end - start + Math.floor(Math.random()*3600);
 
-        redisClient.expire(key, expirationTime, function(err, reply) {
+        redisClient.expire(key, expirationTimeInSeconds, function(err, reply) {
           if (err) {
             console.error(err);
           };
