@@ -2,7 +2,7 @@ version: '2'
 
 services:
   renderbot:
-    image: repo.vaadin.com:5000/bot-render:1.1.0-redis
+    image: repo.vaadin.com:5000/bot-render:1.4.0-redis
     container_name: "renderbot"
     ports:
       - 8090:8080
