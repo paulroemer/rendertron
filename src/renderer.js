@@ -66,6 +66,9 @@ class Renderer {
         Network.enable(),
       ]);
 
+      // enable Do-Not-Track flag for headless Chrome
+      Network.setExtraHTTPHeaders({'headers': {'DNT': '1'}});
+
       // Inject the Shady DOM polyfill if web components v1 is used, so we can
       // serialize the page.
       // TODO(samli): This needs to change to use the non-deprecated API after Chrome 61
