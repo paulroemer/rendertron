@@ -73,6 +73,9 @@ export class Renderer {
     page.evaluateOnNewDocument('ShadyDOM = {force: true}');
     page.evaluateOnNewDocument('ShadyCSS = {shimcssproperties: true}');
 
+    // Enable DNT
+    page.setExtraHTTPHeaders({'DNT': '1'});
+
     let response: puppeteer.Response|null = null;
     // Capture main frame response. This is used in the case that rendering
     // times out, which results in puppeteer throwing an error. This allows us
