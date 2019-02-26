@@ -87,18 +87,26 @@ export class Renderer {
       }
     });
 
+    let requestWasSuccessful = true;
     try {
       // Navigate to page. Wait until there are no oustanding network requests.
       response = await page.goto(
-          requestUrl, {timeout: 10000, waitUntil: 'networkidle0'});
+          requestUrl, {timeout: 10000, waitUntil: 'load'});
     } catch (e) {
-      console.error(e);
+      requestWasSuccessful = false;
+      const msg = "The request to " + requestUrl + " timed out. \n" + e;
+      console.error(msg);
     }
 
     if (!response) {
       console.error('response does not exist');
       // This should only occur when the page is about:blank. See
       // https://github.com/GoogleChrome/puppeteer/blob/v1.5.0/docs/api.md#pagegotourl-options.
+      return {status: 400, content: ''};
+    }
+
+    if (!requestWasSuccessful) {
+      console.error('Got a successful response but puppeteer reported an error');
       return {status: 400, content: ''};
     }
 
