@@ -76,6 +76,9 @@ export class Renderer {
     // Enable DNT
     page.setExtraHTTPHeaders({'DNT': '1'});
 
+    // Custom UA string
+    page.setUserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/71.0.3542.0 Safari/537.36 Prerender_deadbeef")
+
     let response: puppeteer.Response|null = null;
     // Capture main frame response. This is used in the case that rendering
     // times out, which results in puppeteer throwing an error. This allows us
@@ -102,12 +105,12 @@ export class Renderer {
       console.error('response does not exist');
       // This should only occur when the page is about:blank. See
       // https://github.com/GoogleChrome/puppeteer/blob/v1.5.0/docs/api.md#pagegotourl-options.
-      return {status: 400, content: ''};
+      return {status: 408, content: ''};
     }
 
     if (!requestWasSuccessful) {
       console.error('Got a successful response but puppeteer reported an error');
-      return {status: 400, content: ''};
+      return {status: 408, content: ''};
     }
 
     // Disable access to compute metadata. See
